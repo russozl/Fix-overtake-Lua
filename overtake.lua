@@ -1,12 +1,65 @@
 local requiredSpeed = 80
-local showOvertakeWindow = true
+local isOverlayVisible = false -- Variável para controlar a visibilidade do overlay
 
--- This function is called before the event activates. Once it returns true, it’ll run:
+-- Esta função é chamada antes de o evento ser ativado. Uma vez que ela retorna true, o overlay será exibido:
 function script.prepare(dt)
     ac.debug("speed", ac.getCarState(1).speedKmh)
     return ac.getCarState(1).speedKmh > 60
 end
 
+-- ... O código restante do seu script ...
+
+-- Função para alternar a visibilidade do overlay quando o botão é clicado
+local function toggleOverlay()
+    isOverlayVisible = not isOverlayVisible
+end
+
+-- Função para verificar se o mouse está sobre o overlay
+local function isMouseOverOverlay(mouseX, mouseY)
+    local uiState = ac.getUiState()
+    local overlayPosition = vec2(100, 100) -- A posição do overlay
+    local overlaySize = vec2(400 * 0.5, 400 * 0.5) -- O tamanho do overlay
+
+    return (
+        mouseX >= overlayPosition.x and
+        mouseX <= overlayPosition.x + overlaySize.x and
+        mouseY >= overlayPosition.y and
+        mouseY <= overlayPosition.y + overlaySize.y
+    )
+end
+
+function script.drawUI()
+    -- Verifique se o mouse está sobre o overlay
+    local uiState = ac.getUiState()
+    local mouseX, mouseY = uiState.mousePos.x, uiState.mousePos.y
+
+    -- Se o mouse estiver sobre o overlay, mostre-o
+    if isMouseOverOverlay(mouseX, mouseY) then
+        isOverlayVisible = true
+    else
+        -- Caso contrário, torne o overlay transparente
+        isOverlayVisible = false
+    end
+
+    -- Desenhe o botão para abrir/fechar o overlay
+    if ui.button("Toggle Overlay", ui.ButtonStyle.Default, vec2(10, 10), vec2(100, 30)) then
+        toggleOverlay()
+    end
+
+    -- Verifique se o overlay deve ser exibido
+    if isOverlayVisible then
+        -- Desenhe o overlay aqui
+        -- Certifique-se de desenhar os elementos do overlay dentro deste bloco
+        -- para que eles sejam exibidos apenas quando o overlay estiver visível
+
+        ui.beginTransparentWindow("overtakeScore", vec2(100, 100), vec2(400 * 0.5, 400 * 0.5))
+        ui.beginOutline()
+
+        -- ... Resto do seu código do overlay ...
+
+        ui.endTransparentWindow()
+    end
+end
 -- Event state:
 local timePassed = 0
 local totalScore = 0
