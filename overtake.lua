@@ -1,66 +1,16 @@
 local requiredSpeed = 80
 local isOverlayVisible = false -- Variável para controlar a visibilidade do overlay
 
--- Esta função é chamada antes de o evento ser ativado. Uma vez que ela retorna true, o overlay será exibido:
+-- Mensagem inicial personalizada
+ac.setStartMessage('Acelere até '..requiredSpeed..' km/h para iniciar o Highway Legends')
+
+-- Função de preparação
 function script.prepare(dt)
     ac.debug("speed", ac.getCarState(1).speedKmh)
     return ac.getCarState(1).speedKmh > 60
 end
 
--- ... O código restante do seu script ...
-
--- Função para alternar a visibilidade do overlay quando o botão é clicado
-local function toggleOverlay()
-    isOverlayVisible = not isOverlayVisible
-end
-
--- Função para verificar se o mouse está sobre o overlay
-local function isMouseOverOverlay(mouseX, mouseY)
-    local uiState = ac.getUiState()
-    local overlayPosition = vec2(100, 100) -- A posição do overlay
-    local overlaySize = vec2(400 * 0.5, 400 * 0.5) -- O tamanho do overlay
-
-    return (
-        mouseX >= overlayPosition.x and
-        mouseX <= overlayPosition.x + overlaySize.x and
-        mouseY >= overlayPosition.y and
-        mouseY <= overlayPosition.y + overlaySize.y
-    )
-end
-
-function script.drawUI()
-    -- Verifique se o mouse está sobre o overlay
-    local uiState = ac.getUiState()
-    local mouseX, mouseY = uiState.mousePos.x, uiState.mousePos.y
-
-    -- Se o mouse estiver sobre o overlay, mostre-o
-    if isMouseOverOverlay(mouseX, mouseY) then
-        isOverlayVisible = true
-    else
-        -- Caso contrário, torne o overlay transparente
-        isOverlayVisible = false
-    end
-
-    -- Desenhe o botão para abrir/fechar o overlay
-    if ui.button("Toggle Overlay", ui.ButtonStyle.Default, vec2(10, 10), vec2(100, 30)) then
-        toggleOverlay()
-    end
-
-    -- Verifique se o overlay deve ser exibido
-    if isOverlayVisible then
-        -- Desenhe o overlay aqui
-        -- Certifique-se de desenhar os elementos do overlay dentro deste bloco
-        -- para que eles sejam exibidos apenas quando o overlay estiver visível
-
-        ui.beginTransparentWindow("overtakeScore", vec2(100, 100), vec2(400 * 0.5, 400 * 0.5))
-        ui.beginOutline()
-
-        -- ... Resto do seu código do overlay ...
-
-        ui.endTransparentWindow()
-    end
-end
--- Event state:
+-- Estado do evento
 local timePassed = 0
 local totalScore = 0
 local comboMeter = 1
@@ -69,17 +19,93 @@ local highestScore = 0
 local dangerouslySlowTimer = 0
 local carsState = {}
 local wheelsWarningTimeout = 0
+local messages = {}
+local glitter = {}
+local glitterCount = 0
 
+-- Função para adicionar mensagens
+local function addMessage(text, mood)
+    for i = math.min(#messages + 1, 4), 2, -1 do
+        messages[i] = messages[i - 1]
+        messages[i].targetPos = i
+    end
+    messages[1] = { text = text, age = 0, targetPos = 1, currentPos = 1, mood = mood }
+    if mood == 1 then
+        for i = 1, 60 do
+            local dir = vec2(math.random() - 0.5, math.random() - 0.5)
+            glitterCount = glitterCount + 1
+            glitter[glitterCount] = { 
+                color = rgbm.new(hsv(math.random() * 360, 1, 1):rgb(), 1), 
+                pos = vec2(80, 140) + dir * vec2(40, 20),
+                velocity = dir:normalize():scale(0.2 + math.random()),
+                life = 0.5 + 0.5 * math.random()
+            }
+        end
+    end
+end
+
+-- Função para atualizar mensagens e efeitos visuais
+local function updateMessages(dt)
+    comboColor = comboColor + dt * 10 * comboMeter
+    if comboColor > 360 then comboColor = comboColor - 360 end
+    for i = 1, #messages do
+        local m = messages[i]
+        m.age = m.age + dt
+        m.currentPos = math.applyLag(m.currentPos, m.targetPos, 0.8, dt)
+    end
+    for i = glitterCount, 1, -1 do
+        local g = glitter[i]
+        g.pos:add(g.velocity)
+        g.velocity.y = g.velocity.y + 0.02
+        g.life = g.life - dt
+        g.color.mult = math.saturate(g.life * 4)
+        if g.life < 0 then
+            if i < glitterCount then glitter[i] = glitter[glitterCount] end
+            glitterCount = glitterCount - 1
+        end
+    end
+    if comboMeter > 10 and math.random() > 0.98 then
+        for i = 1, math.floor(comboMeter) do
+            local dir = vec2(math.random() - 0.5, math.random() - 0.5)
+            glitterCount = glitterCount + 1
+            glitter[glitterCount] = { 
+                color = rgbm.new(hsv(math.random() * 360, 1, 1):rgb(), 1), 
+                pos = vec2(195, 75) + dir * vec2(40, 20),
+                velocity = dir:normalize():scale(0.2 + math.random()),
+                life = 0.5 + 0.5 * math.random()
+            }
+        end
+    end
+end
+
+-- Função para alternar a visibilidade do overlay
+local function toggleOverlay()
+    isOverlayVisible = not isOverlayVisible
+end
+
+-- Função para verificar se o mouse está sobre o overlay
+local function isMouseOverOverlay(mouseX, mouseY)
+    local overlayPosition = vec2(100, 100) -- Posição do overlay
+    local overlaySize = vec2(400 * 0.5, 400 * 0.5) -- Tamanho do overlay
+    return (
+        mouseX >= overlayPosition.x and
+        mouseX <= overlayPosition.x + overlaySize.x and
+        mouseY >= overlayPosition.y and
+        mouseY <= overlayPosition.y + overlaySize.y
+    )
+end
+
+-- Lógica do evento
 function script.update(dt)
     if timePassed == 0 then
-        addMessage("Let’s go!", 0)
+        addMessage("Vamos correr!", 0)
     end
 
     local player = ac.getCarState(1)
     if player.engineLifeLeft < 1 then
         if totalScore > highestScore then
             highestScore = math.floor(totalScore)
-            ac.sendChatMessage("scored " .. totalScore .. " points.")
+            ac.sendChatMessage("Ganhou " .. (totalScore * 10) .. " créditos.")
         end
         totalScore = 0
         comboMeter = 1
@@ -99,9 +125,7 @@ function script.update(dt)
     if wheelsWarningTimeout > 0 then
         wheelsWarningTimeout = wheelsWarningTimeout - dt
     elseif player.wheelsOutside > 0 then
-        if wheelsWarningTimeout == 0 then
-        end
-        addMessage("Car is outside", -1)
+        addMessage("Carro fora da pista", -1)
         wheelsWarningTimeout = 60
     end
 
@@ -109,14 +133,12 @@ function script.update(dt)
         if dangerouslySlowTimer > 3 then
             if totalScore > highestScore then
                 highestScore = math.floor(totalScore)
-                ac.sendChatMessage("scored " .. totalScore .. " points.")
+                ac.sendChatMessage("Ganhou " .. (totalScore * 10) .. " créditos.")
             end
             totalScore = 0
             comboMeter = 1
         else
-            if dangerouslySlowTimer == 0 then
-                addMessage("Too slow!", -1)
-            end
+            if dangerouslySlowTimer == 0 then addMessage("Muito lento!", -1) end
         end
         dangerouslySlowTimer = dangerouslySlowTimer + dt
         comboMeter = 1
@@ -133,27 +155,24 @@ function script.update(dt)
             local drivingAlong = math.dot(car.look, player.look) > 0.2
             if not drivingAlong then
                 state.drivingAlong = false
-
                 if not state.nearMiss and car.pos:closerToThan(player.pos, 3) then
                     state.nearMiss = true
-
                     if car.pos:closerToThan(player.pos, 2.5) then
                         comboMeter = comboMeter + 3
-                        addMessage("Very close near miss!", 1)
+                        addMessage("Ultrapassagem arriscada!", 1)
                     else
                         comboMeter = comboMeter + 1
-                        addMessage("Near miss: bonus combo", 0)
+                        addMessage("Ultrapassagem próxima", 0)
                     end
                 end
             end
 
             if car.collidedWith == 0 then
-                addMessage("Collision", -1)
+                addMessage("Colisão", -1)
                 state.collided = true
-
                 if totalScore > highestScore then
                     highestScore = math.floor(totalScore)
-                    ac.sendChatMessage("scored " .. totalScore .. " points.")
+                    ac.sendChatMessage("Ganhou " .. (totalScore * 10) .. " créditos.")
                 end
                 totalScore = 0
                 comboMeter = 1
@@ -167,7 +186,7 @@ function script.update(dt)
                     totalScore = totalScore + math.ceil(10 * comboMeter)
                     comboMeter = comboMeter + 1
                     comboColor = comboColor + 90
-                    addMessage("Overtake", comboMeter > 20 and 1 or 0)
+                    addMessage("Ultrapassagem!", comboMeter > 20 and 1 or 0)
                     state.overtaken = true
                 end
             end
@@ -181,33 +200,89 @@ function script.update(dt)
     end
 end
 
--- Restante do código permanece inalterado
--- ... (Código da UI semelhante ao fornecido anteriormente)
-
+-- Interface personalizada
+local speedWarning = 0
 function script.drawUI()
     local uiState = ac.getUiState()
     updateMessages(uiState.dt)
 
-    if showOvertakeWindow then
-        ui.beginTransparentWindow("overtakeScore", vec2(100, 100), vec2(400 * 0.5, 400 * 0.5))
+    local mouseX, mouseY = uiState.mousePos.x, uiState.mousePos.y
+    if isMouseOverOverlay(mouseX, mouseY) then
+        isOverlayVisible = true
+    end
+
+    if ui.button("Toggle Overlay", vec2(10, 10), vec2(100, 30)) then
+        toggleOverlay()
+    end
+
+    if isOverlayVisible then
+        ui.beginTransparentWindow("highwayLegends", vec2(100, 100), vec2(400 * 0.5, 400 * 0.5))
         ui.beginOutline()
 
-        -- ... (Restante do código da UI)
+        -- Novo logo
+        ui.setCursor(vec2(10, 10))
+        ui.image("../highway_legends_logo.png", vec2(100, 50)) -- Caminho local, ajuste conforme necessário
 
+        local speedRelative = math.saturate(math.floor(ac.getCarState(1).speedKmh) / requiredSpeed)
+        speedWarning = math.applyLag(speedWarning, speedRelative < 1 and 1 or 0, 0.5, uiState.dt)
+
+        local colorDark = rgbm(0.4, 0.4, 0.4, 1)
+        local colorGrey = rgbm(0.7, 0.7, 0.7, 1)
+        local colorAccent = rgbm.new(hsv(speedRelative * 120, 1, 1):rgb(), 1)
+        local colorCombo = rgbm.new(hsv(comboColor, math.saturate(comboMeter / 10), 1):rgb(), math.saturate(comboMeter / 4))
+
+        local function speedMeter(ref)
+            ui.drawRectFilled(ref + vec2(0, -4), ref + vec2(180 * 0.5, 5), colorDark, 1)
+            ui.drawLine(ref + vec2(0, -4), ref + vec2(0, 4), colorGrey, 1)
+            ui.drawLine(ref + vec2(requiredSpeed * 0.5, -4), ref + vec2(requiredSpeed * 0.5, 4), colorGrey, 1)
+            local speed = math.min(ac.getCarState(1).speedKmh, 180)
+            if speed > 1 then ui.drawLine(ref + vec2(0, 0), ref + vec2(speed * 0.5, 0), colorAccent, 4) end
+        end
+
+        ui.pushStyleVar(ui.StyleVar.Alpha, 1 - speedWarning)
+        ui.pushFont(ui.Font.Title)
+        ui.text("Highway Legends") -- Novo nome
         ui.popFont()
-        ui.setCursor(startPos + vec2(0, 4 * 30))
+        ui.popStyleVar()
+
+        ui.pushFont(ui.Font.Huge)
+        local customScore = totalScore * 10 -- Transformando pontos em "créditos"
+        ui.text(customScore .. " créditos")
+        ui.sameLine(0, 20)
+        if comboMeter > 20 then ui.beginRotation() end
+        ui.textColored(math.ceil(comboMeter * 10) / 10 .. "x", colorCombo)
+        if comboMeter > 20 then
+            ui.endRotation(math.sin(comboMeter / 180 * 3141.5) * 3 * math.lerpInvSat(comboMeter, 20, 30) + 90)
+        end
+        ui.popFont()
+        ui.endOutline(rgbm(0, 0, 0, 0.3))
+
+        ui.offsetCursorY(10)
+        ui.pushFont(ui.Font.Title)
+        local startPos = ui.getCursor()
+        for i = 1, #messages do
+            local m = messages[i]
+            local f = math.saturate(4 - m.currentPos) * math.saturate(8 - m.age)
+            ui.setCursor(startPos + vec2(10 + math.saturate(1 - m.age * 10) ^ 2 * 50, (m.currentPos - 1) * 15))
+            ui.textColored(m.text, m.mood == 1 and rgbm(0, 1, 0, f) 
+                or m.mood == -1 and rgbm(1, 0, 0, f) or rgbm(1, 1, 1, f))
+        end
+        for i = 1, glitterCount do
+            local g = glitter[i]
+            if g ~= nil then ui.drawLine(g.pos, g.pos + g.velocity * 4, g.color, 2) end
+        end
+        ui.popFont()
+        ui.setCursor(startPos + vec2(0, 4 * 15))
 
         ui.pushStyleVar(ui.StyleVar.Alpha, speedWarning)
-        ui.setCursorY(0)
         ui.pushFont(ui.Font.Main)
-        ui.textColored("Keep speed above " .. requiredSpeed .. " km/h:", colorAccent)
+        ui.textColored("Mantenha acima de " .. requiredSpeed .. " km/h:", colorAccent)
         speedMeter(ui.getCursor() + vec2(-9 * 0.5, 4 * 0.2))
-
         ui.popFont()
         ui.popStyleVar()
 
         if ui.button("Fechar", vec2(20, 20), vec2(60, 30)) then
-            showOvertakeWindow = false
+            isOverlayVisible = false
         end
 
         ui.endTransparentWindow()
